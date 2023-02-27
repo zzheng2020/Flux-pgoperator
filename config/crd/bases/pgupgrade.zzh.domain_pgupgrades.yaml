@@ -1,0 +1,71 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.11.1
+  creationTimestamp: null
+  name: pgupgrades.pgupgrade.zzh.domain
+spec:
+  group: pgupgrade.zzh.domain
+  names:
+    kind: PgUpgrade
+    listKind: PgUpgradeList
+    plural: pgupgrades
+    singular: pgupgrade
+  scope: Namespaced
+  versions:
+  - name: v1
+    schema:
+      openAPIV3Schema:
+        description: PgUpgrade is the Schema for the pgupgrades API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: PgUpgradeSpec defines the desired state of PgUpgrade
+            properties:
+              dbname:
+                description: The target database name.
+                type: string
+              image:
+                description: The container image of the PostgreSQL
+                type: string
+              olddbhost:
+                description: The host of the primary database.
+                type: string
+              olddbport:
+                description: The port of the primary database.
+                type: string
+              pgdump:
+                description: Whether pg_dump is used to dump the data.
+                type: boolean
+              pubname:
+                description: The publication name in the tartget database.
+                type: string
+              subname:
+                description: The subscription name of the PostgreSQL
+                type: string
+            type: object
+          status:
+            description: PgUpgradeStatus defines the observed state of PgUpgrade
+            properties:
+              upgrade:
+                description: whether the upgrade is done
+                type: boolean
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

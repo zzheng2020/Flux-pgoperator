@@ -1,0 +1,114 @@
+// var kubeconfig string
+	// if home := homedir.HomeDir(); home != "" {
+	// 	kubeconfig = filepath.Join(home, ".kube", "config")
+	// } else {
+	// 	kubeconfig = ""
+	// }
+	// config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+	// if err != nil {
+	// 	config, err = rest.InClusterConfig()
+	// 	if err != nil {
+	// 		panic(err.Error())
+	// 	}
+	// }
+	// clientset, err := kubernetes.NewForConfig(config)
+	// if err != nil {
+	// 	panic(err.Error())
+	// }
+
+	// // get the IP address of the postgres-1 Pod
+	// podName := "postgres-1-7955cf94cd-ghpk5"
+	// namespace := "default"
+	// pod, err := clientset.CoreV1().Pods(namespace).Get(context.Background(), podName, metav1.GetOptions{})
+	// if err != nil {
+	// 	panic(err.Error())
+	// }
+	// podIP := pod.Status.PodIP
+	// fmt.Println(podIP)
+
+	// // connect to the PostgreSQL database
+	// connectionString := fmt.Sprintf("host=%s port=54005 user=postgres password=mysecretpassword dbname=mydatabase sslmode=disable", "127.0.0.1")
+	// fmt.Println(connectionString)
+	// db, err := sql.Open("postgres", connectionString)
+	// if err != nil {
+	// 	panic(err.Error())
+	// }
+	// defer db.Close()
+
+	// // send a request to the table
+	// insertStatement := "insert into table_1 values(96966)"
+	// // createPub := "create publication pub2 for all tables"
+	// // deletePub := "delete from pg_catalog.pg_publication where pubname='pub2'"
+	// _, err = db.Exec(insertStatement)
+	// if err != nil {
+	// 	panic(err.Error())
+	// }
+
+	// fmt.Println("Statement executed successfully")
+
+	// log.Info("done")
+
+--------------------------------------------------------------------------------
+
+log.Info("instance", "instance: ", instance)
+
+	log.Info("value", "Upgrade before: ", instance.Status.Upgrade)
+
+	instance.Status.Upgrade = true
+	err = r.Status().Update(ctx, instance)
+	if err != nil {
+		panic(err)
+	}
+
+	log.Info("value", "Upgrade after: ", instance.Status.Upgrade)
+
+--------------------------------------------------------------------------------
+
+	// if !instance.Status.Upgrade {
+	// 	instance.Status.Upgrade = true
+	// 	err = r.createSubscriptions(instance, *found)
+	// 	if err != nil {
+	// 		log.Error(err, "Failed to create subscriptions.")
+	// 		return ctrl.Result{RequeueAfter: time.Second * 5}, err
+	// 	}
+
+	// }
+
+	// Get the list of all pods in the same namespace as the controller.
+	podList := &corev1.PodList{}
+	err = r.Client.List(ctx, podList, &client.ListOptions{Namespace: found.Namespace})
+	if err != nil {
+		log.Error(err, "Get List of pods failed.")
+		return ctrl.Result{}, err
+	}
+
+	// Print the name of each pod.
+	for _, pod := range podList.Items {
+		fmt.Printf("Found pod: %v", pod.Name)
+	}
+
+	if instance.Spec.PgDump {
+		log.Info("PgDump is done.")
+	}
+
+	
+--------------------------------------------------------------------------------
+
+
+		// // Connect to the PostgreSQL database.
+	// connectionString := fmt.Sprintf("host=%s port=%s user=postgres password=mysecretpassword dbname=mydatabase sslmode=disable", "127.0.0.1", pg.Spec.ServicePort)
+	// fmt.Println(connectionString)
+	// db, err := sql.Open("postgres", connectionString)
+	// if err != nil {
+	// 	return err
+	// }
+	// defer db.Close()
+
+	// // Send a command to the table.
+	// subscription := fmt.Sprintf("create subscription %s connection 'dbname=%s host=10.244.0.76 user=postgres password=postgres port=5432' publication %s;", pg.Spec.SubName, pg.Spec.DBName, pg.Spec.PubName)
+	// _, err = db.Exec(subscription)
+	// if err != nil {
+	// 	return err
+	// }
+
+	// log.Info("Subscription created", "subscription", subscription)

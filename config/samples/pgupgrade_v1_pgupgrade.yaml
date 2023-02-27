@@ -1,0 +1,21 @@
+apiVersion: pgupgrade.zzh.domain/v1
+kind: PgUpgrade
+metadata:
+  labels:
+    app.kubernetes.io/name: pgupgrade
+    app.kubernetes.io/instance: pgupgrade-sample
+    app.kubernetes.io/part-of: k8s-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: k8s-operator
+  name: pgupgrade-sample
+spec:
+  # TODO(user): Add fields here
+  image: postgres
+  subname: zzhsub1
+  dbname: mydatabase
+  pubname: pub
+  olddbhost: '10.244.0.76'
+  olddbport: '5432'
+  pgdump: true
+status:
+  upgrade: false

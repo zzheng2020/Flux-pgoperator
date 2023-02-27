@@ -1,0 +1,27 @@
+# permissions for end users to view pgupgrades.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: pgupgrade-viewer-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: k8s-operator
+    app.kubernetes.io/part-of: k8s-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: pgupgrade-viewer-role
+rules:
+- apiGroups:
+  - pgupgrade.zzh.domain
+  resources:
+  - pgupgrades
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - pgupgrade.zzh.domain
+  resources:
+  - pgupgrades/status
+  verbs:
+  - get
