@@ -1,3 +1,5 @@
+# NOTE: This repo is used to test Flux GitOps.
+
 # k8s-operator
 // TODO(user): Add simple overview of use/purpose
 
