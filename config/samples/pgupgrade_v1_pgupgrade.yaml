@@ -17,6 +17,6 @@ spec:
   # olddbhost: '10.244.0.76'
   olddbhost: '10.244.0.168'
   olddbport: '5432'
-  pgdump: false
+  pgdump: true
 status:
   upgrade: false
