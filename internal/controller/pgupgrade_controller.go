@@ -60,6 +60,8 @@ type PgUpgradeReconciler struct {
 //+kubebuilder:rbac:groups=pgupgrade.zzh.domain,resources=pgupgrades/status,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=pgupgrade.zzh.domain,resources=pgupgrades/finalizers,verbs=get;list;watch;create;update;patch;delete
 
+//+kubebuilder:rbac:groups=apps,resources=pods,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=apps,resources=pods/exec,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=apps,resources=services,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
@@ -127,6 +129,7 @@ func (r *PgUpgradeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		found.Spec.Template.Spec.Containers[0].Image = image
 		needUpdate = true
 	}
+
 	// If the deployment image is not the same as the spec, update the deployment.
 	if needUpdate {
 		err = r.Update(ctx, found)
@@ -154,6 +157,14 @@ func (r *PgUpgradeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		log.Error(err, "Failed to get Service")
 		return ctrl.Result{RequeueAfter: time.Second * 5}, err
 	}
+
+	log.V(1).Info("Start to sync shcema")
+	err = r.syncSchema(ctx, instance, *found)
+	if err != nil {
+		log.Error(err, "Failed to sync schema.")
+		return ctrl.Result{RequeueAfter: time.Second * 5}, err
+	}
+	log.V(1).Info("Successfully sync shcema")
 
 	// If old db has already been dumped and it didn't update before, then start to create the subscription.
 	if instance.Spec.PgDump && !instance.Status.Upgrade {
@@ -254,6 +265,108 @@ func (r *PgUpgradeReconciler) serviceForPgUpgrade(pg *pgupgradev1.PgUpgrade) *co
 
 func labelsForPgUpgrade(name string) map[string]string {
 	return map[string]string{"app": "pgupgrade", "pgupgrade_cr": name}
+}
+
+// ecexute the schema sync command.
+func (r *PgUpgradeReconciler) syncSchema(ctx context.Context, pg *pgupgradev1.PgUpgrade, found appsv1.Deployment) error {
+	log := log.FromContext(ctx)
+	// Create a new clientset
+	var kubeconfig string
+	if home := homedir.HomeDir(); home != "" {
+		kubeconfig = filepath.Join(home, ".kube", "config")
+	} else {
+		kubeconfig = ""
+	}
+	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+	if err != nil {
+		config, err = rest.InClusterConfig()
+		if err != nil {
+			return err
+		}
+	}
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return err
+	}
+
+	// Get the pod name of Deployment.
+	pods, err := clientset.CoreV1().Pods("default").List(ctx, metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("app=%s", pg.Spec.OldDBLabel),
+	})
+	if err != nil {
+		return err
+	}
+	podName := pods.Items[0].Name
+	namespace := "default"
+	pod, err := clientset.CoreV1().Pods(namespace).Get(context.Background(), podName, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	podIP := pod.Status.PodIP
+
+	log.V(1).Info("Pod IP and Name", "Pod Ip is ", podIP, "Pod Name is ", podName)
+
+	// Execute the command in the pod.
+	// psql -U postgres -h 10.244.0.91 -p 5432 -d mydatabase -f table_1_schema.sql
+
+	followerPodIP := ""
+	for followerPodIP == "" {
+		followerPods, err := clientset.CoreV1().Pods("default").List(ctx, metav1.ListOptions{
+			LabelSelector: fmt.Sprintf("app=%s", "pgupgrade"),
+		})
+		if err != nil {
+			return err
+		}
+		followerPodsName := followerPods.Items[0].Name
+		folloerPod, err := clientset.CoreV1().Pods(namespace).Get(context.Background(), followerPodsName, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+		followerPodIP = folloerPod.Status.PodIP
+	}
+
+	// cmd := []string{"PGPASSWORD=mysecretpassword", "psql", "-U", "postgres", "-h", followerPodIP, "-p", "5432", "-d", "mydatabase", "-f", pg.Spec.PgDumpFileName}
+
+	sync := fmt.Sprintf("PGPASSWORD=mysecretpassword psql -U postgres -h %s -p 5432 -d mydatabase -f /table_1_schema.sql", followerPodIP)
+	cmd := []string{
+		"/bin/bash",
+		"-c",
+		sync,
+	}
+	log.V(1).Info("Command to be executed", "Command is ", cmd)
+	req := clientset.CoreV1().RESTClient().
+		Post().
+		Namespace(namespace).
+		Resource("pods").
+		Name(podName).
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Command: cmd,
+			Stdin:   false,
+			Stdout:  true,
+			Stderr:  true,
+		}, scheme.ParameterCodec)
+
+	exec, err := remotecommand.NewSPDYExecutor(config, "POST", req.URL())
+	if err != nil {
+		log.Error(err, "Failed to create SPDY executor")
+		return err
+	}
+	// Get the output of the command.
+	var stdout, stderr bytes.Buffer
+	err = exec.StreamWithContext(ctx, remotecommand.StreamOptions{
+		Stdin:  nil,
+		Stdout: &stdout,
+		Stderr: &stderr,
+		Tty:    false,
+	})
+	if err != nil {
+		log.Error(err, "Failed to execute command in pod")
+		return err
+	}
+	fmt.Println(stdout.String())
+
+	return nil
 }
 
 // Create subscriptions.

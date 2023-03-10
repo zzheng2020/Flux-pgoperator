@@ -17,6 +17,9 @@ spec:
   # olddbhost: '10.244.0.76'
   olddbhost: '10.244.0.168'
   olddbport: '5432'
+  olddblabel: postgres-master
+  pgdumpfilename: test_dump.sql
+
   pgdump: true
 status:
   upgrade: false
