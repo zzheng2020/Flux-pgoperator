@@ -60,6 +60,10 @@ type PgUpgradeSpec struct {
 
 	// Whether pg_dump is used to dump the data.
 	PgDump bool `json:"pgdump,omitempty"`
+
+	KillDeployments []string `json:"killdeployments,omitempty"`
+
+	FinishSync bool `json:"finishsync,omitempty"`
 }
 
 // PgUpgradeStatus defines the observed state of PgUpgrade

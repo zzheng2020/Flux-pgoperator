@@ -15,11 +15,15 @@ spec:
   dbname: mydatabase
   pubname: pub
   # olddbhost: '10.244.0.76'
-  olddbhost: '10.244.0.168'
-  olddbport: '5432'
+  olddbhost: "10.244.0.168"
+  olddbport: "5432"
   olddblabel: postgres-master
   pgdumpfilename: test_dump.sql
 
   pgdump: true
+
+  finishsync: false
+  killdeployments:
+    - pg-delete-test
 status:
   upgrade: false

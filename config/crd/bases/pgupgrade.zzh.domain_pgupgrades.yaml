@@ -38,9 +38,15 @@ spec:
               dbname:
                 description: The target database name.
                 type: string
+              finishsync:
+                type: boolean
               image:
                 description: The container image of the PostgreSQL
                 type: string
+              killdeployments:
+                items:
+                  type: string
+                type: array
               olddbhost:
                 description: The host of the primary database.
                 type: string

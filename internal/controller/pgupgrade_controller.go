@@ -166,8 +166,10 @@ func (r *PgUpgradeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 	log.V(1).Info("Successfully sync shcema")
 
+	// TODO: avoid to create two exact same subscriptions.
 	// If old db has already been dumped and it didn't update before, then start to create the subscription.
-	if instance.Spec.PgDump && !instance.Status.Upgrade {
+	// if instance.Spec.PgDump && !instance.Status.Upgrade {
+	if instance.Spec.PgDump && !instance.Spec.FinishSync {
 		log.V(1).Info("Start to create subscriptions.")
 		instance.Status.Upgrade = true
 		err = r.createSubscriptions(ctx, instance, *found)
@@ -176,6 +178,13 @@ func (r *PgUpgradeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			return ctrl.Result{RequeueAfter: time.Second * 5}, err
 		}
 		log.V(1).Info("Successfully create subscriptions.")
+	}
+
+	// when finished sync schema, delete the old db.
+	if instance.Spec.FinishSync {
+		log.V(1).Info("Start to delete old db.")
+		r.deleteResource(ctx, instance, *found)
+		log.V(1).Info("Successfully delete old db.")
 	}
 
 	return ctrl.Result{}, nil
@@ -443,6 +452,46 @@ func (r *PgUpgradeReconciler) createSubscriptions(ctx context.Context, pg *pgupg
 		return err
 	}
 	fmt.Println(stdout.String())
+
+	return nil
+}
+
+// Delete Resource
+func (r *PgUpgradeReconciler) deleteResource(ctx context.Context, pg *pgupgradev1.PgUpgrade, found appsv1.Deployment) error {
+	log := log.FromContext(ctx)
+
+	var kubeconfig string
+	if home := homedir.HomeDir(); home != "" {
+		kubeconfig = filepath.Join(home, ".kube", "config")
+	} else {
+		kubeconfig = ""
+	}
+	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+	if err != nil {
+		config, err = rest.InClusterConfig()
+		if err != nil {
+			panic(err.Error())
+		}
+	}
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Specify the name of the Deployment and the namespace
+	resourceName := pg.Spec.KillDeployments
+	namespace := "default"
+
+	// iterate resourceName
+	for _, name := range resourceName {
+		// Delete the Deployment
+		err = clientset.AppsV1().Deployments(namespace).Delete(context.TODO(), name, metav1.DeleteOptions{})
+		if err != nil {
+			panic(err.Error())
+		}
+
+		log.V(1).Info("Deployment %s in namespace %s deleted\n", name, namespace)
+	}
 
 	return nil
 }
