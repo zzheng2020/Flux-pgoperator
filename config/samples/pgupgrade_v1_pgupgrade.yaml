@@ -10,20 +10,38 @@ metadata:
   name: pgupgrade-sample
 spec:
   # TODO(user): Add fields here
+  # image: postgres
+  # subname: zzhsub1
+  # dbname: mydatabase
+  # pubname: pub
+  # # olddbhost: '10.244.0.76'
+  # olddbhost: "10.244.0.168"
+  # olddbport: "5432"
+  # olddblabel: postgres-master
+  # pgdumpfilename: test_dump.sql
+
+  # pgdump: true
+
+  # finishsync: false
+  # killdeployments:
+  #   - pg-delete-test
+
+  ### delete test ####
   image: postgres
-  subname: zzhsub1
+  subname: zzhsub_delete
   dbname: mydatabase
-  pubname: pub
+  pubname: my_pub_delete
   # olddbhost: '10.244.0.76'
-  olddbhost: "10.244.0.168"
+  olddbhost: "10.244.1.43"
   olddbport: "5432"
   olddblabel: postgres-master
-  pgdumpfilename: test_dump.sql
+  pgdumpfilename: table_1.sql
 
   pgdump: true
 
-  finishsync: false
+  finishsync: true
   killdeployments:
-    - pg-delete-test
+    - postgres-delete-test
+
 status:
   upgrade: false
