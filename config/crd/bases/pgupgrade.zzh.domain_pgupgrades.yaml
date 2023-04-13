@@ -73,6 +73,8 @@ spec:
           status:
             description: PgUpgradeStatus defines the observed state of PgUpgrade
             properties:
+              nginxproxypass:
+                type: boolean
               upgrade:
                 description: whether the upgrade is done
                 type: boolean

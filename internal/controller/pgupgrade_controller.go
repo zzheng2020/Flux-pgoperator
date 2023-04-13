@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -64,9 +65,11 @@ type PgUpgradeReconciler struct {
 //+kubebuilder:rbac:groups=apps,resources=pods/exec,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=apps,resources=services,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=apps,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=pods/exec,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -179,6 +182,14 @@ func (r *PgUpgradeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 		log.V(1).Info("Successfully create subscriptions.")
 	}
+
+	// change the nginx proxy_pass to the new db.
+	log.V(1).Info("Start to change nginx proxy_pass.")
+	err = r.changeNginxProxyPass(ctx, req, instance, *found)
+	if err != nil {
+		return ctrl.Result{RequeueAfter: time.Second * 5}, err
+	}
+	log.V(1).Info("Successfully change nginx proxy_pass.")
 
 	// when finished sync schema, delete the old db.
 	if instance.Spec.FinishSync {
@@ -336,7 +347,8 @@ func (r *PgUpgradeReconciler) syncSchema(ctx context.Context, pg *pgupgradev1.Pg
 
 	// cmd := []string{"PGPASSWORD=mysecretpassword", "psql", "-U", "postgres", "-h", followerPodIP, "-p", "5432", "-d", "mydatabase", "-f", pg.Spec.PgDumpFileName}
 
-	sync := fmt.Sprintf("PGPASSWORD=mysecretpassword psql -U postgres -h %s -p 5432 -d mydatabase -f /table_1_schema.sql", followerPodIP)
+	tableName := pg.Spec.PgDumpFileName
+	sync := fmt.Sprintf("PGPASSWORD=mysecretpassword psql -U postgres -h %s -p 5432 -d mydatabase -f /%s", followerPodIP, tableName)
 	cmd := []string{
 		"/bin/bash",
 		"-c",
@@ -494,4 +506,119 @@ func (r *PgUpgradeReconciler) deleteResource(ctx context.Context, pg *pgupgradev
 	}
 
 	return nil
+}
+
+func (r *PgUpgradeReconciler) changeNginxProxyPass(ctx context.Context, req ctrl.Request, pg *pgupgradev1.PgUpgrade, found appsv1.Deployment) error {
+	log := log.FromContext(ctx)
+
+	var kubeconfig string
+	if home := homedir.HomeDir(); home != "" {
+		kubeconfig = filepath.Join(home, ".kube", "config")
+	} else {
+		kubeconfig = ""
+	}
+	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+	if err != nil {
+		config, err = rest.InClusterConfig()
+		if err != nil {
+			panic(err.Error())
+		}
+	}
+
+	// Create a Kubernetes clientset
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	namespace := "default"
+	configMapName := "nginx-config"
+	configMap, err := clientset.CoreV1().ConfigMaps(namespace).Get(context.Background(), configMapName, metav1.GetOptions{})
+	if err != nil {
+		log.Error(err, "Failed to get ConfigMap")
+		return err
+	}
+
+	// check if nginx.conf exists
+	if _, ok := configMap.Data["nginx.conf"]; !ok {
+		log.Error(err, "configMap does not contain nginx.conf")
+		return fmt.Errorf("configMap does not contain nginx.conf")
+	}
+
+	newdbhost, err := r.getFolloerIP(ctx, pg, found)
+	if err != nil {
+		log.Error(err, "Failed to get follower IP")
+		return err
+	}
+	oldConfig := configMap.Data["nginx.conf"]
+	newConfig := strings.Replace(oldConfig, pg.Spec.OldDBHost+":5432", newdbhost+":5432", 1)
+	if oldConfig == newConfig {
+		return fmt.Errorf("proxy_pass value not found or already updated")
+	}
+	configMap.Data["nginx.conf"] = newConfig
+	_, err = clientset.CoreV1().ConfigMaps(namespace).Update(context.Background(), configMap, metav1.UpdateOptions{})
+	if err != nil {
+		log.Error(err, "Failed to update ConfigMap")
+		return err
+	}
+	return nil
+}
+
+func (r *PgUpgradeReconciler) getFolloerIP(ctx context.Context, pg *pgupgradev1.PgUpgrade, found appsv1.Deployment) (string, error) {
+	log := log.FromContext(ctx)
+	// Create a new clientset
+	var kubeconfig string
+	if home := homedir.HomeDir(); home != "" {
+		kubeconfig = filepath.Join(home, ".kube", "config")
+	} else {
+		kubeconfig = ""
+	}
+	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+	if err != nil {
+		config, err = rest.InClusterConfig()
+		if err != nil {
+			return "", err
+		}
+	}
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return "", err
+	}
+
+	// Get the pod name of Deployment.
+	pods, err := clientset.CoreV1().Pods("default").List(ctx, metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("app=%s", pg.Spec.OldDBLabel),
+	})
+	if err != nil {
+		return "", err
+	}
+	podName := pods.Items[0].Name
+	namespace := "default"
+	pod, err := clientset.CoreV1().Pods(namespace).Get(context.Background(), podName, metav1.GetOptions{})
+	if err != nil {
+		return "", err
+	}
+	podIP := pod.Status.PodIP
+
+	log.V(1).Info("Pod IP and Name", "Pod Ip is ", podIP, "Pod Name is ", podName)
+
+	// Execute the command in the pod.
+	// psql -U postgres -h 10.244.0.91 -p 5432 -d mydatabase -f table_1_schema.sql
+
+	followerPodIP := ""
+	for followerPodIP == "" {
+		followerPods, err := clientset.CoreV1().Pods("default").List(ctx, metav1.ListOptions{
+			LabelSelector: fmt.Sprintf("app=%s", "pgupgrade"),
+		})
+		if err != nil {
+			return "", err
+		}
+		followerPodsName := followerPods.Items[0].Name
+		folloerPod, err := clientset.CoreV1().Pods(namespace).Get(context.Background(), followerPodsName, metav1.GetOptions{})
+		if err != nil {
+			return "", err
+		}
+		followerPodIP = folloerPod.Status.PodIP
+	}
+	return followerPodIP, nil
 }

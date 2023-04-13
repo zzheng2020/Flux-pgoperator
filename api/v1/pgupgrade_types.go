@@ -73,6 +73,8 @@ type PgUpgradeStatus struct {
 
 	// whether the upgrade is done
 	Upgrade bool `json:"upgrade,omitempty"`
+
+	NginxProxyPass bool `json:"nginxproxypass,omitempty"`
 }
 
 //+kubebuilder:object:root=true
