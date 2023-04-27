@@ -185,9 +185,11 @@ func (r *PgUpgradeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// change the nginx proxy_pass to the new db.
 	log.V(1).Info("Start to change nginx proxy_pass.")
-	err = r.changeNginxProxyPass(ctx, req, instance, *found)
-	if err != nil {
-		return ctrl.Result{RequeueAfter: time.Second * 5}, err
+	if instance.Spec.FinishSync {
+		err = r.changeNginxProxyPass(ctx, req, instance, *found)
+		if err != nil {
+			return ctrl.Result{RequeueAfter: time.Second * 5}, err
+		}
 	}
 	log.V(1).Info("Successfully change nginx proxy_pass.")
 
