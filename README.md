@@ -1,4 +1,4 @@
-# NOTE: This repo is used to test Flux GitOps.
+The new functions of the master thesis project are implemented in this repo.
 
 # k8s-operator
 // TODO(user): Add simple overview of use/purpose
