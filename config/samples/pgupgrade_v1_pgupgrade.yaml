@@ -15,7 +15,7 @@ spec:
   dbname: mydatabase
   pubname: pub
   # olddbhost: '10.244.0.76'
-  olddbhost: "10.244.1.76"
+  olddbhost: "10.244.1.156"
   olddbport: "5432"
   olddblabel: postgres-master
   # olddblabel: postgres
